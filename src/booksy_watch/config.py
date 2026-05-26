@@ -52,6 +52,7 @@ class Config:
     salon: SalonConfig
     watch: WatchConfig
     notify: NotifyConfig = field(default_factory=NotifyConfig)
+    language: str = "en"  # "en" | "pl"
 
     def save(self) -> None:
         with config_path().open("wb") as f:
@@ -60,6 +61,7 @@ class Config:
                     "salon": asdict(self.salon),
                     "watch": {k: v for k, v in asdict(self.watch).items() if v is not None},
                     "notify": asdict(self.notify),
+                    "ui": {"language": self.language},
                 },
                 f,
             )
@@ -75,6 +77,7 @@ class Config:
             salon=SalonConfig(**data["salon"]),
             watch=WatchConfig(**data["watch"]),
             notify=NotifyConfig(**data.get("notify", {})),
+            language=data.get("ui", {}).get("language", "en"),
         )
 
 

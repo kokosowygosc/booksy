@@ -31,10 +31,14 @@ uv run booksy-watch
 
 First launch starts an interactive wizard:
 
-1. Paste a salon URL 
-2. Pick a service from the printed table
-3. Set polling interval (default 10 min) and lookahead window (default 90 days)
-4. Sound / desktop notifications on/off
+1. Pick language (`en` / `pl`)
+2. Paste a salon URL
+3. Pick a service from the printed table
+4. Set polling interval (default 10 min) and lookahead window (default 90 days)
+5. Sound / desktop notifications on/off
+
+Language can be changed later inside the TUI settings (press `s`). A language
+change takes effect on the next restart.
 
 Config is saved to `~/.config/booksy-watch/config.toml`. Re-run the wizard with:
 

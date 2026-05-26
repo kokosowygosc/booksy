@@ -7,6 +7,7 @@ import sys
 from rich.console import Console
 
 from .config import Config, config_path
+from .i18n import set_language
 from .tui import BooksyWatchApp
 from .wizard import run_wizard
 
@@ -24,7 +25,8 @@ def main() -> int:
             "  booksy-watch reconfigure  # re-run setup wizard\n"
             "  booksy-watch path         # print config file path\n"
             "\n"
-            "Keys in TUI: q=quit  p=pause  r=reset target  c=check now\n"
+            "TUI keys: q=quit  p=pause  r=reset target  c=check now  s=settings\n"
+            "Language is set in the wizard and editable in settings (s).\n"
         )
         return 0
 
@@ -33,13 +35,19 @@ def main() -> int:
         return 0
 
     if args and args[0] == "reconfigure":
-        cfg = run_wizard()
+        existing = Config.load()
+        if existing:
+            set_language(existing.language)
+        cfg = run_wizard(existing)
     else:
         cfg = Config.load()
         if cfg is None:
             console.print("[yellow]No config found — starting setup wizard.[/yellow]")
             cfg = run_wizard()
+        else:
+            set_language(cfg.language)
 
+    set_language(cfg.language)
     BooksyWatchApp(cfg).run()
     return 0
 

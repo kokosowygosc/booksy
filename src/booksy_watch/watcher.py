@@ -14,6 +14,11 @@ import httpx
 
 from .booksy import BooksyClient, Slot
 from .config import Config, State
+from .i18n import t
+
+
+def _fmt(ts: datetime) -> str:
+    return ts.strftime("%Y-%m-%d %H:%M")
 
 
 class EventKind(str, Enum):
@@ -116,7 +121,7 @@ class Watcher:
         if not slots:
             await self.queue.put(
                 WatchEvent(ts=datetime.now(), kind=EventKind.NONE, target=self.target,
-                           message="no available slots in window")
+                           message=t("ev_no_slots"))
             )
             return
 
@@ -127,7 +132,7 @@ class Watcher:
             self.target = earliest
             await self.queue.put(
                 WatchEvent(ts=datetime.now(), kind=EventKind.FIRST, target=earliest,
-                           message=f"watching from {earliest:%Y-%m-%d %H:%M}")
+                           message=t("ev_watching_from", ts=_fmt(earliest)))
             )
             return
 
@@ -136,7 +141,7 @@ class Watcher:
             await self.queue.put(
                 WatchEvent(ts=datetime.now(), kind=EventKind.EARLIER,
                            target=earliest, prev_target=prev,
-                           message=f"earlier slot: {earliest:%Y-%m-%d %H:%M} (was {prev:%Y-%m-%d %H:%M})")
+                           message=t("ev_earlier", new=_fmt(earliest), old=_fmt(prev)))
             )
             return
 
@@ -147,11 +152,11 @@ class Watcher:
             await self.queue.put(
                 WatchEvent(ts=datetime.now(), kind=EventKind.TAKEN,
                            target=earliest, prev_target=prev,
-                           message=f"target {prev:%Y-%m-%d %H:%M} taken — new earliest: {earliest:%Y-%m-%d %H:%M}")
+                           message=t("ev_taken", old=_fmt(prev), new=_fmt(earliest)))
             )
             return
 
         await self.queue.put(
             WatchEvent(ts=datetime.now(), kind=EventKind.SAME, target=prev,
-                       message=f"unchanged: {prev:%Y-%m-%d %H:%M}")
+                       message=t("ev_unchanged", ts=_fmt(prev)))
         )

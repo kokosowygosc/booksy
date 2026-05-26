@@ -11,10 +11,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, Static
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, Select, Static
 
 from .booksy import BooksyClient
 from .config import Config
+from .i18n import LANGUAGES, LANGUAGE_LABELS, set_language, t
 from .notify import desktop_notify, play_sound
 from .watcher import EventKind, WatchEvent, Watcher
 
@@ -37,16 +38,16 @@ class TargetPanel(Static):
         if self.target:
             target_line = f"[bold green]{self.target:%Y-%m-%d %H:%M}[/bold green]"
         else:
-            target_line = "[dim](no slot yet — waiting for first check)[/dim]"
+            target_line = f"[dim]{t('panel_no_slot')}[/dim]"
         if self.paused:
-            next_line = "[bold yellow]PAUSED[/bold yellow]"
+            next_line = f"[bold yellow]{t('panel_paused')}[/bold yellow]"
         elif self.next_check:
             remaining = max(0, int((self.next_check - datetime.now()).total_seconds()))
             mm, ss = divmod(remaining, 60)
-            next_line = f"next check in [bold]{mm:02d}:{ss:02d}[/bold]"
+            next_line = f"{t('panel_next_in')} [bold]{mm:02d}:{ss:02d}[/bold]"
         else:
-            next_line = "starting..."
-        return f"\n  TARGET SLOT:  {target_line}\n  {next_line}\n"
+            next_line = t("panel_starting")
+        return f"\n  {t('panel_target')}:  {target_line}\n  {next_line}\n"
 
 
 class History(Static):
@@ -62,27 +63,18 @@ class History(Static):
         lines: list[str] = []
         for ev in list(self.events)[:20]:
             sym, style = KIND_STYLE[ev.kind]
-            t = ev.ts.strftime("%H:%M:%S")
-            lines.append(f"[dim]{t}[/dim]  [{style}]{sym} {ev.kind.value:<7}[/{style}]  {ev.message}")
-        self.update("\n".join(lines) if lines else "[dim](no events yet)[/dim]")
+            ts = ev.ts.strftime("%H:%M:%S")
+            lines.append(f"[dim]{ts}[/dim]  [{style}]{sym} {ev.kind.value:<7}[/{style}]  {ev.message}")
+        self.update("\n".join(lines) if lines else "[dim]—[/dim]")
 
 
 class SettingsScreen(ModalScreen[dict | None]):
-    """In-app settings: tweak polling interval, lookahead, notifications.
-
-    Returns a dict of new values on save, or None on cancel.
-    """
-
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-    ]
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
     CSS = """
-    SettingsScreen {
-        align: center middle;
-    }
+    SettingsScreen { align: center middle; }
     #settings-dialog {
-        width: 60;
+        width: 64;
         height: auto;
         padding: 1 2;
         border: round $primary;
@@ -98,28 +90,16 @@ class SettingsScreen(ModalScreen[dict | None]):
         margin-bottom: 1;
     }
     #settings-dialog Label.field {
-        width: 28;
+        width: 30;
         content-align: left middle;
         height: 3;
     }
-    #settings-dialog Input {
-        width: 1fr;
-    }
-    #settings-dialog Checkbox {
-        width: 1fr;
-    }
-    #buttons {
-        height: 3;
-        align: right middle;
-    }
-    #buttons Button {
-        margin-left: 1;
-    }
-    #error {
-        color: $error;
-        height: auto;
-        margin-bottom: 1;
-    }
+    #settings-dialog Input { width: 1fr; }
+    #settings-dialog Checkbox { width: 1fr; }
+    #settings-dialog Select { width: 1fr; }
+    #buttons { height: 3; align: right middle; }
+    #buttons Button { margin-left: 1; }
+    #error { color: $error; height: auto; margin-bottom: 1; }
     """
 
     def __init__(self, cfg: Config) -> None:
@@ -128,10 +108,10 @@ class SettingsScreen(ModalScreen[dict | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings-dialog"):
-            yield Label("Settings", classes="title")
+            yield Label(t("settings_title"), classes="title")
             yield Static("", id="error")
             with Horizontal(classes="row"):
-                yield Label("Polling interval (min)", classes="field")
+                yield Label(t("settings_interval"), classes="field")
                 yield Input(
                     value=str(self.cfg.watch.interval_minutes),
                     id="interval",
@@ -139,7 +119,7 @@ class SettingsScreen(ModalScreen[dict | None]):
                     restrict=r"[0-9]*",
                 )
             with Horizontal(classes="row"):
-                yield Label("Lookahead window (days)", classes="field")
+                yield Label(t("settings_lookahead"), classes="field")
                 yield Input(
                     value=str(self.cfg.watch.date_range_days),
                     id="days",
@@ -147,14 +127,22 @@ class SettingsScreen(ModalScreen[dict | None]):
                     restrict=r"[0-9]*",
                 )
             with Horizontal(classes="row"):
-                yield Label("Sound on alert", classes="field")
+                yield Label(t("settings_sound"), classes="field")
                 yield Checkbox(value=self.cfg.notify.sound, id="sound")
             with Horizontal(classes="row"):
-                yield Label("Desktop notification", classes="field")
+                yield Label(t("settings_desktop"), classes="field")
                 yield Checkbox(value=self.cfg.notify.desktop, id="desktop")
+            with Horizontal(classes="row"):
+                yield Label(t("settings_language"), classes="field")
+                yield Select(
+                    [(LANGUAGE_LABELS[code], code) for code in LANGUAGES],
+                    value=self.cfg.language if self.cfg.language in LANGUAGES else "en",
+                    id="language",
+                    allow_blank=False,
+                )
             with Horizontal(id="buttons"):
-                yield Button("Cancel", id="cancel", variant="default")
-                yield Button("Save", id="save", variant="primary")
+                yield Button(t("btn_cancel"), id="cancel", variant="default")
+                yield Button(t("btn_save"), id="save", variant="primary")
 
     def on_mount(self) -> None:
         self.query_one("#interval", Input).focus()
@@ -174,19 +162,23 @@ class SettingsScreen(ModalScreen[dict | None]):
             interval = int(self.query_one("#interval", Input).value or "0")
             days = int(self.query_one("#days", Input).value or "0")
         except ValueError:
-            err.update("Interval and days must be integers.")
+            err.update(t("err_int"))
             return
         if interval < 1:
-            err.update("Interval must be ≥ 1 minute.")
+            err.update(t("err_interval_min"))
             return
         if days < 1:
-            err.update("Lookahead must be ≥ 1 day.")
+            err.update(t("err_lookahead_min"))
             return
+        lang_value = self.query_one("#language", Select).value
+        if lang_value is Select.BLANK:
+            lang_value = self.cfg.language
         self.dismiss({
             "interval_minutes": interval,
             "date_range_days": days,
             "sound": self.query_one("#sound", Checkbox).value,
             "desktop": self.query_one("#desktop", Checkbox).value,
+            "language": str(lang_value),
         })
 
 
@@ -198,6 +190,9 @@ class BooksyWatchApp(App):
     #history { border: round $secondary; padding: 1 2; }
     """
 
+    # Static EN descriptions: Textual reads BINDINGS at class load time, so any
+    # dynamic per-language rebuild can race with the Footer. PL users still get
+    # the working keys; only the footer captions stay English.
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("p", "pause", "Pause/Resume"),
@@ -223,18 +218,21 @@ class BooksyWatchApp(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        # Fetch business details for header (best-effort).
         try:
             with BooksyClient(country=self.cfg.salon.country) as c:
                 biz = c.get_business(self.cfg.salon.business_id)
             self._biz_name = biz.name
             svc = biz.service_by_variant(self.cfg.watch.service_variant_id)
             self._svc_name = svc.name if svc else f"variant {self.cfg.watch.service_variant_id}"
-            self._staffer_name = biz.staffer_name(self.cfg.watch.staffer_id)
+            self._staffer_name = (
+                biz.staffer_name(self.cfg.watch.staffer_id)
+                if self.cfg.watch.staffer_id is not None
+                else t("staffer_any")
+            )
         except Exception as e:  # noqa: BLE001
             self._biz_name = f"business {self.cfg.salon.business_id}"
             self._svc_name = f"variant {self.cfg.watch.service_variant_id}"
-            self._staffer_name = f"(failed to load: {e})"
+            self._staffer_name = f"(error: {e})"
         self._render_salon_line()
 
         history = self.query_one(History)
@@ -243,10 +241,9 @@ class BooksyWatchApp(App):
                 ts=datetime.now(),
                 kind=EventKind.SAME,
                 target=self.watcher.target,
-                message=f"resumed with target {self.watcher.target:%Y-%m-%d %H:%M}",
+                message=t("ev_resumed", ts=self.watcher.target.strftime("%Y-%m-%d %H:%M")),
             ))
 
-        # Background tasks
         self.run_worker(self._consume_events(), name="events", exclusive=False)
         self.run_worker(self.watcher.run(), name="watcher", exclusive=False)
         self.set_interval(1.0, self._tick)
@@ -255,8 +252,8 @@ class BooksyWatchApp(App):
         self.query_one("#salon", Static).update(
             f"[bold]{self._biz_name}[/bold]\n"
             f"[cyan]{self._svc_name}[/cyan]  ·  {self._staffer_name}  "
-            f"·  every [bold]{self.cfg.watch.interval_minutes}min[/bold]  "
-            f"·  scanning [bold]{self.cfg.watch.date_range_days}d[/bold] ahead"
+            f"·  {t('header_every')} [bold]{self.cfg.watch.interval_minutes}{t('header_min')}[/bold]  "
+            f"·  {t('header_scanning')} [bold]{self.cfg.watch.date_range_days}{t('header_days')}[/bold] {t('header_ahead')}"
         )
 
     def _tick(self) -> None:
@@ -282,14 +279,12 @@ class BooksyWatchApp(App):
 
     def action_reset(self) -> None:
         self.watcher.reset_target()
-        history = self.query_one(History)
-        history.add(WatchEvent(
+        self.query_one(History).add(WatchEvent(
             ts=datetime.now(), kind=EventKind.SAME, target=None,
-            message="target reset by user — next check sets new target",
+            message=t("ev_reset"),
         ))
 
     def action_check_now(self) -> None:
-        # Force loop to exit its sleep immediately.
         self.watcher.next_check_at = datetime.now()
 
     def action_settings(self) -> None:
@@ -303,18 +298,22 @@ class BooksyWatchApp(App):
         self.cfg.watch.date_range_days = result["date_range_days"]
         self.cfg.notify.sound = result["sound"]
         self.cfg.notify.desktop = result["desktop"]
+        self.cfg.language = result["language"]
+        # Switch language live — affects all subsequent t() calls. Footer
+        # bindings are class-level English and stay that way; everything
+        # else (panel, header, new events) is re-rendered in the new lang.
+        set_language(self.cfg.language)
         try:
             self.cfg.save()
         except OSError as e:
             self.query_one(History).add(WatchEvent(
                 ts=datetime.now(), kind=EventKind.ERROR, target=self.watcher.target,
-                message=f"failed to save config: {e}",
+                message=t("ev_save_failed", e=str(e)),
             ))
             return
 
         self._render_salon_line()
 
-        # If new interval is shorter than remaining wait, pull next check sooner.
         new_interval = self.cfg.watch.interval_minutes
         if self.watcher.next_check_at is not None and new_interval < old_interval:
             soonest = datetime.now() + timedelta(minutes=new_interval)
@@ -323,10 +322,11 @@ class BooksyWatchApp(App):
 
         self.query_one(History).add(WatchEvent(
             ts=datetime.now(), kind=EventKind.SAME, target=self.watcher.target,
-            message=(
-                f"settings updated: interval={new_interval}min, "
-                f"lookahead={self.cfg.watch.date_range_days}d, "
-                f"sound={'on' if self.cfg.notify.sound else 'off'}, "
-                f"desktop={'on' if self.cfg.notify.desktop else 'off'}"
+            message=t(
+                "ev_settings_updated",
+                i=new_interval,
+                d=self.cfg.watch.date_range_days,
+                s=t("on") if self.cfg.notify.sound else t("off"),
+                dt=t("on") if self.cfg.notify.desktop else t("off"),
             ),
         ))
